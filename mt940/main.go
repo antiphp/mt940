@@ -3,54 +3,92 @@ package mt940
 import (
     "os"
     "log"
-    "bufio"
     "strings"
+    "fmt"
 )
 
 const (
-    transactionReferenceNumber = "20"
-    relatedReference           = "21"
-    accountIdentification      = "25"
+    transactionReferenceNumber = ":20:"
+    relatedReference           = ":21:"
+    accountIdentification      = ":25:"
 )
 
-func ReaderFromFile(fileName string) Document {
+func ReaderFromFile(fileName string) (Document, error) {
     file, err := os.Open(fileName)
     if err != nil {
         log.Fatal(err)
     }
     defer file.Close()
 
-    d, s, t := Document{}, Section{}, Tag{}
-    scanner := bufio.NewScanner(file)
-    for scanner.Scan() {
-        line := strings.TrimSpace(scanner.Text())
-        if line == "" {
-            continue
-        }
-        if startWith
-    }
+    document, message := Document{}, Message{}
 
-    if err := scanner.Err(); err != nil {
+    position := int(0)
+    stat, err := file.Stat()
+    if err != nil {
         log.Fatal(err)
     }
-    return document
+    size := int(stat.Size())
+    bytesRead, data := make([]byte, 511), ""
+    for position < size {
+        file.Read(bytesRead)
+        data = string(bytesRead)
+
+        if data[0:1] == " " || data[0:1] == "\n" {
+            position++
+            continue
+        }
+        if data[0:1] == "-" {
+            document.messages = append(document.messages, message)
+            message = Message{}
+        }
+        if data[0:1] != ":" {
+            return document, fmt.Errorf("Fuck parse error [%s:%d]", fileName, position)
+        }
+
+        if strings.Index(data, transactionReferenceNumber) == 0 {
+            content, bytesRead := readTag(transactionReferenceNumber, data, 16, true)
+            tag := Tag{
+                field:   transactionReferenceNumber,
+                content: content,
+            }
+            message.tags = append(message.tags, tag)
+            position += bytesRead
+            continue
+        }
+        if strings.Index(data, relatedReference) == 0 {
+
+        }
+
+        position++
+    }
+
+    return document, nil
 }
 
 type Tag struct {
-    Number string
-    Value  string
+    field   string
+    content string
 }
 
-type Section struct {
+type Message struct {
     tags []Tag
 }
 
 type Document struct {
-    sections []Section
+    messages []Message
+}
+
+func readTag(field string, data string, maxBytes int, skipOnNewLine bool) (string, int) {
+    if skipOnNewLine {
+        if newLinePosition := strings.Index(data, "\n"); newLinePosition >= 0 && newLinePosition <= maxBytes {
+            maxBytes = newLinePosition
+        }
+    }
+    return data[len(field):maxBytes], maxBytes
 }
 
 func NewDocument() *Document {
     return &Document{
-        sections: nil,
+        messages: nil,
     }
 }
